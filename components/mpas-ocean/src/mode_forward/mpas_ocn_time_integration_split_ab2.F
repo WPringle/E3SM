@@ -106,6 +106,17 @@ module ocn_time_integration_split_ab2
       self_attraction_and_loading_beta, &
       rho0gInv    ! 1/(rho_sw*gravity), converts surface pressure to head
 
+   ! Fast-time averaging filter for the barotropic mode.
+   ! btrFilterPowerLaw = .false. reproduces the historical uniform (boxcar)
+   ! average exactly, including its arithmetic, so results stay bit-identical.
+   ! When .true., btrFiltPrimary(0:nSub) weights the barotropic velocity sum
+   ! and btrFiltSecondary(1:nSub) weights the thickness-flux sum, following
+   ! Shchepetkin and McWilliams (2005) eqs. 3.64, 3.65 and 3.43.
+   logical :: btrFilterPowerLaw
+   real (kind=RKIND), dimension(:), allocatable :: &
+      btrFiltPrimary, &! primary weights a_m, indices 0:nSub
+      btrFiltSecondary ! secondary weights b_m, indices 1:nSub
+
     type(MPAS_Time_Type) :: nowTime ! Current model time
     character(len=STRKIND) :: initialTimeStamp, nowTimeStamp
                                     ! Initial and current time stamp
@@ -995,9 +1006,14 @@ module ocn_time_integration_split_ab2
             normalBarotropicVelocityCur(iEdge)
 
             ! normalBarotropicVelocityNew = BtrOld
-            !  This is the first for the summation
-            normalBarotropicVelocityNew(iEdge) = &
-            normalBarotropicVelocityCur(iEdge)
+            !  This is the first for the summation (the m = 0 term)
+            if (btrFilterPowerLaw) then
+               normalBarotropicVelocityNew(iEdge) = &
+               btrFiltPrimary(0)*normalBarotropicVelocityCur(iEdge)
+            else
+               normalBarotropicVelocityNew(iEdge) = &
+               normalBarotropicVelocityCur(iEdge)
+            end if
 
             ! barotropicThicknessFlux = 0
             barotropicThicknessFlux(iEdge) = 0.0_RKIND
@@ -1240,8 +1256,13 @@ module ocn_time_integration_split_ab2
 
                   flux = btrvel_temp(iEdge) * wctEdge(iEdge)
 
-                  barotropicThicknessFlux(iEdge) = &
-                  barotropicThicknessFlux(iEdge) + flux
+                  if (btrFilterPowerLaw) then
+                     barotropicThicknessFlux(iEdge) = &
+                     barotropicThicknessFlux(iEdge) + btrFiltSecondary(j)*flux
+                  else
+                     barotropicThicknessFlux(iEdge) = &
+                     barotropicThicknessFlux(iEdge) + flux
+                  end if
                end do ! edges
                !$omp end do
                !$omp end parallel
@@ -1515,8 +1536,13 @@ module ocn_time_integration_split_ab2
 
                   flux = btrvel_temp(iEdge) * wctEdge(iEdge)
 
-                  barotropicThicknessFlux(iEdge) = &
-                  barotropicThicknessFlux(iEdge) + flux
+                  if (btrFilterPowerLaw) then
+                     barotropicThicknessFlux(iEdge) = &
+                     barotropicThicknessFlux(iEdge) + btrFiltSecondary(j)*flux
+                  else
+                     barotropicThicknessFlux(iEdge) = &
+                     barotropicThicknessFlux(iEdge) + flux
+                  end if
 
                end do ! edge barotropic thickness flux
                !$omp end do
@@ -1547,11 +1573,19 @@ module ocn_time_integration_split_ab2
 
             !$omp parallel
             !$omp do schedule(runtime)
+            if (btrFilterPowerLaw) then
+               do iEdge = 1, nEdgesAll
+                  normalBarotropicVelocityNew(iEdge) = &
+                  normalBarotropicVelocityNew(iEdge) + &
+                  btrFiltPrimary(j)*normalBarotropicVelocitySubcycleNew(iEdge)
+               end do  ! iEdge
+            else
             do iEdge = 1, nEdgesAll
                normalBarotropicVelocityNew(iEdge) = &
                normalBarotropicVelocityNew(iEdge) + &
                normalBarotropicVelocitySubcycleNew(iEdge)
             end do  ! iEdge
+            end if
             !$omp end do
             !$omp end parallel
 
@@ -1573,6 +1607,9 @@ module ocn_time_integration_split_ab2
          ! normalBarotropicVelocity, and F
          call mpas_timer_start('btr se norm')
 
+         ! The power-law weights are normalized by construction, so the sums
+         ! are already the filtered values and must not be divided again.
+         if (.not. btrFilterPowerLaw) then
          !$omp parallel
          !$omp do schedule(runtime)
          do iEdge = 1, nEdgesAll
@@ -1586,6 +1623,7 @@ module ocn_time_integration_split_ab2
          end do
          !$omp end do
          !$omp end parallel
+         end if
 
          call mpas_timer_stop('btr se norm')
 
@@ -3235,6 +3273,26 @@ module ocn_time_integration_split_ab2
       ! dynamic anomaly.  Matches ocn_vel_tidal_potential_tend.
       rho0gInv = 1.0_RKIND / rho_sw / gravity
 
+      ! Fast-time averaging filter for the barotropic mode. nBtrSubcycles is
+      ! already set above, so the weights can be built here.
+      select case (trim(config_btr_filter_type))
+      case ('boxcar')
+         btrFilterPowerLaw = .false.
+      case ('powerlaw')
+         btrFilterPowerLaw = .true.
+         if (config_btr_filter_power_p <= 0.0_RKIND .or. &
+             config_btr_filter_power_q <= 0.0_RKIND) then
+            call mpas_log_write( &
+               'config_btr_filter_power_p and _q must be positive', MPAS_LOG_CRIT)
+         end if
+         call ocn_set_btr_filter_weights( &
+            nBtrSubcycles*config_btr_subcycle_loop_factor, nBtrSubcycles, ierr)
+      case default
+         call mpas_log_write('Unknown config_btr_filter_type: ' // &
+            trim(config_btr_filter_type) // &
+            '. Valid values are ''boxcar'' and ''powerlaw''.', MPAS_LOG_CRIT)
+      end select
+
       !-----------------------------------------------------------------
       if ( config_do_restart ) then
          block => domain % blocklist
@@ -3266,6 +3324,247 @@ module ocn_time_integration_split_ab2
 
       end if
    end subroutine ocn_time_integration_split_ab2_init!}}}
+
+!***********************************************************************
+!
+!  routine ocn_set_btr_filter_weights
+!
+!> \brief   Build the fast-time averaging weights for the barotropic mode
+!> \details
+!>  Constructs the primary weights a_m (applied to the barotropic velocity
+!>  sum, m = 0..nSub) and the secondary weights b_m (applied to the
+!>  thickness-flux sum, m = 1..nSub) for the Shchepetkin and McWilliams
+!>  (2005) power-law filter, their eq. 3.64:
+!>
+!>     A(s) = A0 [ (s/s0)^p (1 - (s/s0)^q) - r (s/s0) ],   0 <= s <= s0
+!>
+!>  where s = m/nBtr is time in units of the baroclinic step. A0, s0 and r
+!>  follow from the normalization, consistency and second-order accuracy
+!>  conditions of their eq. 3.65,
+!>
+!>     I_n = int s^n A(s) ds = 1,   n = 0, 1, 2.
+!>
+!>  Writing I_n = A0 s0^(n+1) J_n with
+!>     J_n(r) = 1/(n+p+1) - 1/(n+p+q+1) - r/(n+2),
+!>  the three conditions reduce to the single scalar equation
+!>     J_1^2 = J_0 J_2,
+!>  solved here by bisection, followed by s0 = J_0/J_1 and A0 = 1/(s0 J_0).
+!>
+!>  The continuous solution is then sampled on the discrete subcycle times
+!>  and corrected by the minimum-norm perturbation that makes the DISCRETE
+!>  moments exact. That last step matters: it is the discrete weights that
+!>  set the actual response, and enforcing sum(a) = sum(a s) = sum(a s^2) = 1
+!>  is what cancels the O(omega^2) damping. Note this requires some weights
+!>  to be negative - any non-negative weight set has a positive second
+!>  central moment and so damps at O(omega^2), which is exactly the
+!>  first-order accuracy limit noted in their eq. 3.54.
+!>
+!>  Secondary weights follow their eq. 3.43:  b_m = (1/nBtr) sum_{k>=m} a_k.
+!
+!-----------------------------------------------------------------------
+
+   subroutine ocn_set_btr_filter_weights(nSub, nBtr, err)!{{{
+
+      integer, intent(in) :: nSub  !< number of barotropic subcycle steps
+      integer, intent(in) :: nBtr  !< subcycles per baroclinic step
+      integer, intent(out) :: err
+
+      integer :: m, i, j, k
+      real (kind=RKIND) :: p, q, r, rlo, rhi, flo, fhi, fmid, rmid
+      real (kind=RKIND) :: s0, A0, s, u, acc
+      real (kind=RKIND), dimension(3) :: rhs, ycor
+      real (kind=RKIND), dimension(3,3) :: G
+      real (kind=RKIND), dimension(0:2) :: Jn
+
+      err = 0
+
+      if (allocated(btrFiltPrimary)) then
+         if (size(btrFiltPrimary) == nSub+1) return   ! already built
+         deallocate(btrFiltPrimary, btrFiltSecondary)
+      end if
+      allocate(btrFiltPrimary(0:nSub), btrFiltSecondary(1:nSub))
+
+      p = config_btr_filter_power_p
+      q = config_btr_filter_power_q
+
+      ! Bracket and bisect J_1^2 - J_0 J_2 = 0 for r.
+      rlo = 0.0_RKIND
+      flo = fShape(rlo)
+      rhi = -1.0_RKIND
+      fhi = flo
+      do i = 1, 200
+         rmid = 0.0_RKIND + 0.005_RKIND*real(i,RKIND)
+         fmid = fShape(rmid)
+         if (flo*fmid < 0.0_RKIND) then
+            rhi = rmid
+            fhi = fmid
+            exit
+         end if
+         rlo = rmid
+         flo = fmid
+      end do
+      if (rhi < 0.0_RKIND) then
+         call mpas_log_write('ocn_set_btr_filter_weights: no root for the '// &
+            'filter shape; check config_btr_filter_power_p/_q', MPAS_LOG_CRIT)
+      end if
+      do i = 1, 100
+         rmid = 0.5_RKIND*(rlo+rhi)
+         fmid = fShape(rmid)
+         if (flo*fmid <= 0.0_RKIND) then
+            rhi = rmid
+         else
+            rlo = rmid
+            flo = fmid
+         end if
+      end do
+      r = 0.5_RKIND*(rlo+rhi)
+
+      do k = 0, 2
+         Jn(k) = 1.0_RKIND/(real(k,RKIND)+p+1.0_RKIND) &
+               - 1.0_RKIND/(real(k,RKIND)+p+q+1.0_RKIND) &
+               - r/(real(k,RKIND)+2.0_RKIND)
+      end do
+      s0 = Jn(0)/Jn(1)
+      A0 = 1.0_RKIND/(s0*Jn(0))
+
+      ! The filter support s0 is set by p and q and is generally NOT an integer
+      ! (1.569 for the default p=2, q=4; it ranges from about 1.24 to 2.59 over
+      ! reasonable p,q, exceeding 2 for p=1). The subcycling must reach at least
+      ! s0*dt, so config_btr_subcycle_loop_factor has to be at least ceil(s0).
+      ! Without this check a too-short window would silently clip the shape and
+      ! the moment conditions would be solved over the truncated range instead,
+      ! giving a filter that satisfies none of the accuracy conditions.
+      if (s0*real(nBtr,RKIND) > real(nSub,RKIND)) then
+         call mpas_log_write( &
+            'Barotropic filter support s0 = $r baroclinic steps exceeds the '// &
+            'subcycle window set by config_btr_subcycle_loop_factor = $i. '// &
+            'Increase it to at least $i, or choose larger '// &
+            'config_btr_filter_power_p / _q to shorten the support.', &
+            MPAS_LOG_CRIT, realArgs=(/ s0 /), &
+            intArgs=(/ config_btr_subcycle_loop_factor, ceiling(s0) /))
+      end if
+
+      ! Sample the shape on the subcycle times, zero beyond the support.
+      ! The 1/nBtr factor is the quadrature weight ds, so that the discrete
+      ! sums approximate the integrals I_n rather than nBtr times them.
+      do m = 0, nSub
+         s = real(m,RKIND)/real(nBtr,RKIND)
+         if (s > s0) then
+            btrFiltPrimary(m) = 0.0_RKIND
+         else
+            u = s/s0
+            btrFiltPrimary(m) = A0*(u**p*(1.0_RKIND - u**q) - r*u) &
+                              / real(nBtr,RKIND)
+         end if
+      end do
+
+      ! Minimum-norm correction making the DISCRETE moments exact. Restricted
+      ! to the support so the filter stays compact: a correction spread over
+      ! all subcycles would reintroduce nonzero weights beyond s0 and defeat
+      ! the shortened subcycling the shape is designed to allow.
+      ! G = A A^T with A rows [1, s, s^2];  rhs = target - A w.
+      G = 0.0_RKIND
+      rhs = 0.0_RKIND
+      do m = 0, nSub
+         s = real(m,RKIND)/real(nBtr,RKIND)
+         if (s > s0) cycle
+         do i = 1, 3
+            do j = 1, 3
+               G(i,j) = G(i,j) + s**(i-1) * s**(j-1)
+            end do
+            rhs(i) = rhs(i) - s**(i-1) * btrFiltPrimary(m)
+         end do
+      end do
+      rhs(1) = rhs(1) + 1.0_RKIND
+      rhs(2) = rhs(2) + 1.0_RKIND
+      rhs(3) = rhs(3) + 1.0_RKIND
+      call solve3x3(G, rhs, ycor, err)
+      if (err /= 0) then
+         call mpas_log_write('ocn_set_btr_filter_weights: singular moment '// &
+            'system', MPAS_LOG_CRIT)
+      end if
+      do m = 0, nSub
+         s = real(m,RKIND)/real(nBtr,RKIND)
+         if (s > s0) cycle
+         btrFiltPrimary(m) = btrFiltPrimary(m) &
+                           + ycor(1) + ycor(2)*s + ycor(3)*s*s
+      end do
+
+      ! Secondary weights, eq. 3.43.
+      do m = 1, nSub
+         acc = 0.0_RKIND
+         do k = m, nSub
+            acc = acc + btrFiltPrimary(k)
+         end do
+         btrFiltSecondary(m) = acc/real(nBtr,RKIND)
+      end do
+
+      call mpas_log_write('Barotropic fast-time filter: power-law '// &
+         '(Shchepetkin and McWilliams 2005, eq. 3.64)')
+      call mpas_log_write('  p $r  q $r  r $r  s0 $r', &
+         realArgs=(/ p, q, r, s0 /))
+      call mpas_log_write('  support $r baroclinic steps of $i subcycles', &
+         realArgs=(/ s0 /), intArgs=(/ nSub /))
+
+   contains
+
+      real (kind=RKIND) function fShape(rr)
+         real (kind=RKIND), intent(in) :: rr
+         real (kind=RKIND) :: J0, J1, J2
+         J0 = 1.0_RKIND/(p+1.0_RKIND) - 1.0_RKIND/(p+q+1.0_RKIND) - rr/2.0_RKIND
+         J1 = 1.0_RKIND/(p+2.0_RKIND) - 1.0_RKIND/(p+q+2.0_RKIND) - rr/3.0_RKIND
+         J2 = 1.0_RKIND/(p+3.0_RKIND) - 1.0_RKIND/(p+q+3.0_RKIND) - rr/4.0_RKIND
+         fShape = J1*J1 - J0*J2
+      end function fShape
+
+   end subroutine ocn_set_btr_filter_weights!}}}
+
+!***********************************************************************
+
+   subroutine solve3x3(A, b, x, err)!{{{
+      ! Gaussian elimination with partial pivoting for a 3x3 system.
+      real (kind=RKIND), dimension(3,3), intent(in) :: A
+      real (kind=RKIND), dimension(3), intent(in) :: b
+      real (kind=RKIND), dimension(3), intent(out) :: x
+      integer, intent(out) :: err
+
+      real (kind=RKIND), dimension(3,4) :: M
+      real (kind=RKIND) :: piv, fac
+      integer :: i, j, k, ip
+
+      err = 0
+      M(:,1:3) = A
+      M(:,4) = b
+      do k = 1, 3
+         ip = k
+         do i = k+1, 3
+            if (abs(M(i,k)) > abs(M(ip,k))) ip = i
+         end do
+         if (abs(M(ip,k)) < 1.0e-30_RKIND) then
+            err = 1
+            x = 0.0_RKIND
+            return
+         end if
+         if (ip /= k) then
+            do j = 1, 4
+               piv = M(k,j); M(k,j) = M(ip,j); M(ip,j) = piv
+            end do
+         end if
+         do i = k+1, 3
+            fac = M(i,k)/M(k,k)
+            do j = k, 4
+               M(i,j) = M(i,j) - fac*M(k,j)
+            end do
+         end do
+      end do
+      do i = 3, 1, -1
+         x(i) = M(i,4)
+         do j = i+1, 3
+            x(i) = x(i) - M(i,j)*x(j)
+         end do
+         x(i) = x(i)/M(i,i)
+      end do
+   end subroutine solve3x3!}}}
 
 !***********************************************************************
 

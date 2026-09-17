@@ -635,6 +635,9 @@
 <config_n_btr_cor_iter>2</config_n_btr_cor_iter>
 <config_vel_correction>.true.</config_vel_correction>
 <config_btr_subcycle_loop_factor>2</config_btr_subcycle_loop_factor>
+<config_btr_filter_type>'boxcar'</config_btr_filter_type>
+<config_btr_filter_power_p>2.0</config_btr_filter_power_p>
+<config_btr_filter_power_q>4.0</config_btr_filter_power_q>
 <config_btr_gam1_velWt1>0.5333</config_btr_gam1_velWt1>
 <config_btr_gam2_SSHWt1>0.5333</config_btr_gam2_SSHWt1>
 <config_btr_gam3_velWt2>1.0</config_btr_gam3_velWt2>
