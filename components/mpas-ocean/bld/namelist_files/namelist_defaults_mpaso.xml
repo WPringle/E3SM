@@ -549,11 +549,33 @@
 <config_loglaw_bottom_drag_max>1.0e-1</config_loglaw_bottom_drag_max>
 <config_explicit_bottom_drag_coeff>1.0e-3</config_explicit_bottom_drag_coeff>
 <config_use_topographic_wave_drag>.false.</config_use_topographic_wave_drag>
-<config_topographic_wave_drag_scheme>'ZAE'</config_topographic_wave_drag_scheme>
-<config_topographic_wave_drag_coeff>5.0e-4</config_topographic_wave_drag_coeff>
+<!-- Was 'ZAE'. ZAE and LGF are not usable in a multi-layer configuration and now
+     abort at init, so the default points at the one scheme that is. -->
+<config_topographic_wave_drag_scheme>'JSL'</config_topographic_wave_drag_scheme>
+<!-- Was 5.0e-4, which was appropriate to the ZAE formula. For JSL this coefficient
+     is the prefactor in C = coeff*kappa*h^2*N_b, i.e. the 1/2 of Jayne and
+     St. Laurent (2001); 5.0e-4 here would make the drag weaker by ~1000x. -->
+<config_topographic_wave_drag_coeff>0.5</config_topographic_wave_drag_coeff>
 <config_thickness_drag_type>'centered'</config_thickness_drag_type>
 <config_topographic_wave_drag_cutoff_depth>500</config_topographic_wave_drag_cutoff_depth>
-<config_topographic_wave_drag_cutoff_width>10</config_topographic_wave_drag_cutoff_width>
+<!-- Was 10 m, which made the taper effectively a step: only 0.3% of IcoswISC30E3r5
+     edges fell in the transition. At 100 m the transition spans ~300-700 m depth
+     and covers 3.1% of edges, while the retained sum(h^2) changes by under 0.01%
+     -- the shallower gain and deeper loss very nearly cancel. -->
+<config_topographic_wave_drag_cutoff_width>100</config_topographic_wave_drag_cutoff_width>
+<config_topographic_wave_drag_layer_depth_max>500.0</config_topographic_wave_drag_layer_depth_max>
+<config_topographic_wave_drag_max_rate_dt>0.5</config_topographic_wave_drag_max_rate_dt>
+<config_topographic_wave_drag_use_dynamic_N>.true.</config_topographic_wave_drag_use_dynamic_N>
+<config_topographic_wave_drag_use_tidal_filter>.true.</config_topographic_wave_drag_use_tidal_filter>
+<config_tidal_filter_type>'bandpass'</config_tidal_filter_type>
+<config_tidal_filter_semi_frequency>1.43e-4</config_tidal_filter_semi_frequency>
+<config_tidal_filter_diur_frequency>7.0e-5</config_tidal_filter_diur_frequency>
+<config_tidal_filter_semi_alpha>0.2</config_tidal_filter_semi_alpha>
+<config_tidal_filter_diur_alpha>0.2</config_tidal_filter_diur_alpha>
+<config_topographic_wave_drag_kappa_semi>1.0</config_topographic_wave_drag_kappa_semi>
+<config_topographic_wave_drag_kappa_diur>1.0</config_topographic_wave_drag_kappa_diur>
+<config_tidal_filter_window>25.0</config_tidal_filter_window>
+<config_tidal_filter_nsamples>10</config_tidal_filter_nsamples>
 
 <!-- Rayleigh_damping -->
 <config_Rayleigh_damping_coeff>0.0</config_Rayleigh_damping_coeff>

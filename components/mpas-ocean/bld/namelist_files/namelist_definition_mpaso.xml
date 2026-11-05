@@ -1991,6 +1991,125 @@ Valid values: any positive real
 Default: Defined in namelist_defaults.xml
 </entry>
 
+<entry id="config_topographic_wave_drag_layer_depth_max" type="real"
+	category="bottom_drag" group="bottom_drag">
+Height above the bed over which the topographic wave drag is distributed. The drag
+is spread uniformly over all layers within this height of the bed, so the
+depth-integrated stress is unchanged. Set to 0 to apply the drag in the bottom cell
+only. Unrelated to config_topographic_wave_drag_cutoff_depth, which is the minimum
+water depth at which the drag acts.
+
+Valid values: any non-negative real
+Default: Defined in namelist_defaults.xml
+</entry>
+
+<entry id="config_topographic_wave_drag_max_rate_dt" type="real"
+	category="bottom_drag" group="bottom_drag">
+Upper bound on the topographic wave drag rate multiplied by the time step. The drag
+is explicit, so a value of order one means a layer in the drag band loses its entire
+momentum in one step and the scheme diverges. The model logs how many edges are
+clamped; a large fraction means the drag is set by the stability limit, not the physics.
+
+Valid values: any positive real less than 1
+Default: Defined in namelist_defaults.xml
+</entry>
+
+<entry id="config_topographic_wave_drag_use_dynamic_N" type="logical"
+	category="bottom_drag" group="bottom_drag">
+If true, the bottom buoyancy frequency used by the JSL topographic wave drag is taken
+from the model's own BruntVaisalaFreqTop each timestep, rather than the static
+topo_buoyancy_N1B field from the topographic_wave_drag input stream.
+
+Valid values: .true. or .false.
+Default: Defined in namelist_defaults.xml
+</entry>
+
+<entry id="config_topographic_wave_drag_use_tidal_filter" type="logical"
+	category="bottom_drag" group="bottom_drag">
+If true, the JSL topographic wave drag acts on the tidal part of the barotropic
+velocity, isolated by a boxcar filter, rather than on the total velocity. This
+prevents the drag from damping the mean circulation.
+
+Valid values: .true. or .false.
+Default: Defined in namelist_defaults.xml
+</entry>
+
+<entry id="config_tidal_filter_type" type="char*1024"
+	category="bottom_drag" group="bottom_drag">
+How the tidal part of the barotropic velocity is isolated. 'bandpass' uses the streaming second-order band-pass filters of Xu and Zaron (2024, 2025), one per tidal frequency band, so semidiurnal and diurnal tides are separated and each gets a drag evaluated at its own frequency. 'boxcar' uses a single 25-hour running-mean complement.
+
+Valid values: 'bandpass' or 'boxcar'
+Default: Defined in namelist_defaults.xml
+</entry>
+
+<entry id="config_tidal_filter_semi_frequency" type="real"
+	category="bottom_drag" group="bottom_drag">
+Target angular frequency of the semidiurnal band-pass filter, s^-1. Sits between M2 and S2 so both pass, along with N2.
+
+Valid values: any positive real
+Default: Defined in namelist_defaults.xml
+</entry>
+
+<entry id="config_tidal_filter_diur_frequency" type="real"
+	category="bottom_drag" group="bottom_drag">
+Target angular frequency of the diurnal band-pass filter, s^-1. Sits between O1 and K1.
+
+Valid values: any positive real
+Default: Defined in namelist_defaults.xml
+</entry>
+
+<entry id="config_tidal_filter_semi_alpha" type="real"
+	category="bottom_drag" group="bottom_drag">
+Dimensionless bandwidth of the semidiurnal band-pass filter. Transient e-folding time is 2/(alpha*omega).
+
+Valid values: any real greater than 0 and less than 2
+Default: Defined in namelist_defaults.xml
+</entry>
+
+<entry id="config_tidal_filter_diur_alpha" type="real"
+	category="bottom_drag" group="bottom_drag">
+Dimensionless bandwidth of the diurnal band-pass filter. Twice the semidiurnal value equalizes the two transient decay times.
+
+Valid values: any real greater than 0 and less than 2
+Default: Defined in namelist_defaults.xml
+</entry>
+
+<entry id="config_topographic_wave_drag_kappa_semi" type="real"
+	category="bottom_drag" group="bottom_drag">
+Scaling factor on the semidiurnal band of the topographic wave drag (kappa_j of Xu and Zaron 2025, equation 2).
+
+Valid values: any non-negative real
+Default: Defined in namelist_defaults.xml
+</entry>
+
+<entry id="config_topographic_wave_drag_kappa_diur" type="real"
+	category="bottom_drag" group="bottom_drag">
+Scaling factor on the diurnal band of the topographic wave drag.
+
+Valid values: any non-negative real
+Default: Defined in namelist_defaults.xml
+</entry>
+
+<entry id="config_tidal_filter_window" type="real"
+	category="bottom_drag" group="bottom_drag">
+Width in hours of the boxcar window used to low-pass the barotropic velocity; the
+complement is taken as the tidal velocity. 25 hours places both the semidiurnal and
+diurnal bands at nulls of the boxcar response. The sub-sampling interval in timesteps
+is derived from this and config_dt at run time.
+
+Valid values: any positive real
+Default: Defined in namelist_defaults.xml
+</entry>
+
+<entry id="config_tidal_filter_nsamples" type="integer"
+	category="bottom_drag" group="bottom_drag">
+Number of samples held in the tidal velocity filter circular buffer, spread evenly
+across config_tidal_filter_window. Sets the memory cost and the sampling interval.
+
+Valid values: any integer greater than 2
+Default: Defined in namelist_defaults.xml
+</entry>
+
 
 <!-- Rayleigh_damping -->
 

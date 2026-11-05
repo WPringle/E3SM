@@ -46,6 +46,7 @@ module ocn_time_integration_split_ab2
 
    use ocn_equation_of_state
    use ocn_vmix
+   use ocn_tidal_velocity_filter
    use ocn_vertical_advection
    use ocn_vertical_remap
    use ocn_time_average_coupled
@@ -620,6 +621,13 @@ module ocn_time_integration_split_ab2
          !$acc exit data copyout(lowFreqDivergenceNew)
       endif
 #endif
+
+      ! Isolate the tidal part of the barotropic velocity for the topographic
+      ! wave drag. This uses the barotropic velocity carried in from the end of
+      ! the previous timestep, since the new one is not produced until stage 2,
+      ! and it is done once here rather than inside the outer loop so that the
+      ! drag sees the same tidal velocity in every iteration of that loop.
+      call ocn_tidal_velocity_filter_compute(normalBarotropicVelocityCur, dt, err)
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       ! BEGIN large outer timestep iteration loop
@@ -2659,6 +2667,11 @@ module ocn_time_integration_split_ab2
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       ! END large iteration loop
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+      ! Feed the newly advanced barotropic velocity into the tidal filter's
+      ! circular buffer. Once per timestep, outside the outer loop, to match the
+      ! sampling interval the filter window is built on.
+      call ocn_tidal_velocity_filter_update(normalBarotropicVelocityNew, dt, err)
 
       call mpas_timer_start("se implicit vert mix")
 

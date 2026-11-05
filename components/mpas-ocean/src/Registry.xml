@@ -122,6 +122,12 @@
 		<dim name="nGofsFilterSamples" definition="namelist:config_gofs_filter_nsamples"
                         description="Number of samples in the GOFS coupling 25-hour filter circular buffer"
 		/>
+		<dim name="nTidalFilterSamples" definition="namelist:config_tidal_filter_nsamples"
+                        description="Number of samples in the tidal velocity filter circular buffer"
+		/>
+		<dim name="nTidalBands" definition="2"
+                        description="Number of tidal frequency bands the wave drag is split across (semidiurnal, diurnal)"
+		/>
 	</dims>
 
 	<!--*************************************-->
@@ -1223,9 +1229,61 @@
 					description="Specifies minimum depth at which topographic wave drag is applied"
 					possible_values="any positive real"
 		/>
-		<nml_option name="config_topographic_wave_drag_cutoff_width" type="real" default_value="10" units="m"
-					description="Width over which the topographic wave drag is progressively turned off"
+		<nml_option name="config_topographic_wave_drag_cutoff_width" type="real" default_value="100" units="m"
+					description="Width in water depth over which the topographic wave drag is progressively turned off below config_topographic_wave_drag_cutoff_depth. The taper is (tanh((H-cutoff_depth)/cutoff_width)+1)/2, so the transition spans roughly four times this width. The former default of 10 m made the taper a near-discontinuity in the coefficient field, switching the drag on across a single cell at the shelf break."
 					possible_values="any positive real"
+		/>
+		<nml_option name="config_topographic_wave_drag_layer_depth_max" type="real" default_value="500.0" units="m"
+					description="Height above the bed over which the topographic wave drag is distributed. The drag is spread uniformly over all layers whose mid-depth lies within this height of the bed, so that the depth-integrated stress is unchanged. Set to 0 to apply the drag in the bottom cell only, which reproduces the historical behaviour. NOTE: this is the thickness of the drag layer and is unrelated to config_topographic_wave_drag_cutoff_depth, which is the minimum water depth at which the drag acts; the two share a default of 500 m by coincidence."
+					possible_values="any non-negative real"
+		/>
+		<nml_option name="config_topographic_wave_drag_max_rate_dt" type="real" default_value="0.5" units="unitless"
+					description="Upper bound on the topographic wave drag rate multiplied by the time step. The drag is applied explicitly, so a value of order one means a layer in the drag band loses its entire momentum in a single step and the scheme diverges; this clamp bounds it at any dt. The supercritical saturation removes most of the offending edges on physical grounds, but the near-bed buoyancy frequency is a model field and can spike, so this is the backstop. The model logs how many edges are clamped; if that is a large fraction of the wet edges, the drag is being set by the stability limit rather than by the physics and the result will depend on dt."
+					possible_values="any positive real less than 1"
+		/>
+		<nml_option name="config_topographic_wave_drag_use_dynamic_N" type="logical" default_value=".true."
+					description="If true, the bottom buoyancy frequency used by the JSL topographic wave drag is taken from the model's own BruntVaisalaFreqTop each timestep. If false, the static topo_buoyancy_N1B field from the topographic_wave_drag input stream is used instead."
+					possible_values=".true. or .false."
+		/>
+		<nml_option name="config_topographic_wave_drag_use_tidal_filter" type="logical" default_value=".true."
+					description="If true, the JSL topographic wave drag acts on the tidal part of the barotropic velocity, isolated by a 25-hour boxcar filter, rather than on the total velocity. This prevents the drag from damping the mean circulation."
+					possible_values=".true. or .false."
+		/>
+		<nml_option name="config_tidal_filter_type" type="character" default_value="bandpass" units="unitless"
+					description="How the tidal part of the barotropic velocity is isolated. 'bandpass' uses the streaming second-order band-pass filters of Xu and Zaron (2024, 2025), one per tidal frequency band, so that the semidiurnal and diurnal tides are separated and each is given a drag evaluated at its own frequency. 'boxcar' uses a single 25-hour running-mean complement, which lumps both bands together and evaluates the drag at the M2 frequency only."
+					possible_values="'bandpass' or 'boxcar'"
+		/>
+		<nml_option name="config_tidal_filter_semi_frequency" type="real" default_value="1.43e-4" units="s^-1"
+					description="Target (central) angular frequency of the semidiurnal band-pass filter. The Xu and Zaron (2025) two-filter value, sitting between M2 (1.4052e-4) and S2 (1.4544e-4) so both pass, along with N2."
+					possible_values="any positive real"
+		/>
+		<nml_option name="config_tidal_filter_diur_frequency" type="real" default_value="7.0e-5" units="s^-1"
+					description="Target (central) angular frequency of the diurnal band-pass filter. The Xu and Zaron (2025) two-filter value, sitting between O1 (6.760e-5) and K1 (7.292e-5)."
+					possible_values="any positive real"
+		/>
+		<nml_option name="config_tidal_filter_semi_alpha" type="real" default_value="0.2" units="unitless"
+					description="Dimensionless bandwidth of the semidiurnal band-pass filter. Smaller is sharper but decays more slowly, with transient e-folding time 2/(alpha*omega). At 0.2 the filter passes M2 and S2 at 0.99 and N2 at 0.94, while admitting 0.14 of K1. This is the Xu and Zaron (2025) two-filter optimum for M2."
+					possible_values="any real greater than 0 and less than 2"
+		/>
+		<nml_option name="config_tidal_filter_diur_alpha" type="real" default_value="0.2" units="unitless"
+					description="Dimensionless bandwidth of the diurnal band-pass filter. Set equal to the semidiurnal value rather than to twice it. The diurnal filter is intrinsically the leakier of the two, and because M2 is about three times K1 in this configuration the contaminating signal is large: weighted by the model's own amplitudes, the out-of-band content of the diurnal filter output is 68 percent of the in-band content at alpha 0.4 but 37 percent at 0.2. The cost is only 5 percent of K1 and O1 throughput, which is a clean scaling that the kappa factor absorbs, whereas contamination is a structural error it cannot. Do not reduce much further: Xu and Zaron (2025) Table 7 finds alpha 0.1 worse than 0.2 for every constituent, because in-band attenuation then outweighs the reduced leakage at fixed kappa."
+					possible_values="any real greater than 0 and less than 2"
+		/>
+		<nml_option name="config_topographic_wave_drag_kappa_semi" type="real" default_value="1.0" units="unitless"
+					description="Scaling factor applied to the semidiurnal band of the topographic wave drag, the kappa_j of Xu and Zaron (2025) equation 2. Tunes the semidiurnal dissipation independently of the diurnal."
+					possible_values="any non-negative real"
+		/>
+		<nml_option name="config_topographic_wave_drag_kappa_diur" type="real" default_value="1.0" units="unitless"
+					description="Scaling factor applied to the diurnal band of the topographic wave drag. Xu and Zaron (2025) use half the semidiurnal value in their best baroclinic run, but that is calibrated at 1/12 degree, where low-mode and topographically trapped waves are substantially resolved and so need less parameterizing. At 30 km far less is resolved, which argues for a larger factor, not a smaller one. Note also that the diurnal band already loses roughly 60 percent of its drag to the 28.7 degree critical latitude alone, and that Xu and Zaron compensate for the conversion missing poleward of that latitude by increasing the drag equatorward of it."
+					possible_values="any non-negative real"
+		/>
+		<nml_option name="config_tidal_filter_window" type="real" default_value="25.0" units="h"
+					description="Width of the boxcar window used to low-pass the barotropic velocity. The complement of this low-pass is taken as the tidal velocity. 25 hours is the standard choice: it places both the semidiurnal and diurnal bands at nulls of the boxcar response, so M2 is retained at over 99 percent. The sub-sampling interval in timesteps is derived from this and config_dt at run time, so the window does not silently change when config_dt does."
+					possible_values="any positive real"
+		/>
+		<nml_option name="config_tidal_filter_nsamples" type="integer" default_value="10" units="unitless"
+					description="Number of samples held in the tidal velocity filter circular buffer. These are spread evenly across config_tidal_filter_window, so this sets both the memory cost (nsamples * nEdges reals) and how finely the window is resolved. It must be large enough that the sampling interval resolves the tide: 10 samples over 25 hours gives one every 2.5 hours, comfortably resolving M2."
+					possible_values="any integer greater than 2"
 		/>
 	</nml_record>
 	<nml_record name="gofs_coupling" mode="forward">
@@ -1817,6 +1875,7 @@
 		<package name="tidalPotentialForcingPKG" description="This package controls variables required for tidal potential forcing"/>
 		<package name="topographicWaveDragPKG" description="This package controls variables required for topographic wave drag"/>
 		<package name="gofsCouplingPKG" description="Variables for GOFS3.1 one-way coupling"/>
+		<package name="tidalVelocityFilterPKG" description="This package controls variables required for the 25-hour boxcar tidal velocity filter used by the topographic wave drag"/>
 		<package name="gotmPKG" description="This package is for GOTM variables, which are only needed when using GOTM for the vertical turbulence closure."/>
 		<package name="verticalRemapPKG" description="This package is for variables required for vertical Lagrangian remapping."/>
 		<package name="activeWavePKG" description="This package controls variables required for wave coupling"/>
@@ -2158,6 +2217,12 @@
             <var name="gofsFilterIndex" packages="gofsCouplingPKG"/>
             <var name="gofsFilterCount" packages="gofsCouplingPKG"/>
             <var name="gofsFilterStepCounter" packages="gofsCouplingPKG"/>
+            <var name="tidalFilterBuffer" packages="tidalVelocityFilterPKG"/>
+            <var name="tidalFilterIndex" packages="tidalVelocityFilterPKG"/>
+            <var name="tidalFilterCount" packages="tidalVelocityFilterPKG"/>
+            <var name="tidalFilterStepCounter" packages="tidalVelocityFilterPKG"/>
+            <var name="tidalVelocityBand" packages="tidalVelocityFilterPKG"/>
+            <var name="tidalFilterBandP" packages="tidalVelocityFilterPKG"/>
 		</stream>
 
 		<stream name="output"
@@ -3581,6 +3646,43 @@
 		<var name="gofsFilterStepCounter" type="integer" dimensions="" units="unitless"
 			description="Steps since last sample was stored"
 			packages="gofsCouplingPKG"
+		/>
+		<!-- 25-hour boxcar tidal velocity filter, used by the topographic wave drag -->
+		<var name="tidalFilterLowpass" type="real" dimensions="nEdges" units="m s^-1"
+			description="Boxcar low-pass of the barotropic velocity over the filter window"
+			packages="tidalVelocityFilterPKG"
+		/>
+		<var name="tidalVelocity" type="real" dimensions="nEdges" units="m s^-1"
+			description="Tidal part of the barotropic velocity: normalBarotropicVelocity minus its boxcar low-pass. Used by the 'boxcar' filter type only."
+			packages="tidalVelocityFilterPKG"
+		/>
+		<var name="tidalVelocityBand" type="real" dimensions="nTidalBands nEdges" units="m s^-1"
+			description="Band-passed barotropic tidal velocity, band 1 semidiurnal and band 2 diurnal. This is the u_j of Xu and Zaron (2025) equation 2, and is the velocity each band's wave drag acts on. Prognostic: it is the state of the band-pass filter and is carried in the restart stream."
+			packages="tidalVelocityFilterPKG"
+		/>
+		<var name="tidalFilterBandP" type="real" dimensions="nTidalBands nEdges" units="m s^-2"
+			description="Auxiliary state of the band-pass filter, p = du_j/dt - alpha*omega_j*u, which removes the du/dt forcing from the filter equation. Prognostic and carried in the restart stream."
+			packages="tidalVelocityFilterPKG"
+		/>
+		<var name="temp_twd_band" type="real" dimensions="nTidalBands nEdges Time" units="m^2 s^-2"
+			description="Depth-integrated momentum sink per unit density from the topographic wave drag, split by tidal band. Multiplying by the band velocity gives that band's contribution to the energy removed from the barotropic tide."
+			packages="topographicWaveDragPKG"
+		/>
+		<var name="tidalFilterBuffer" type="real" dimensions="nTidalFilterSamples nEdges" units="m s^-1"
+			description="Circular buffer of sub-sampled barotropic velocity for the tidal filter"
+			packages="tidalVelocityFilterPKG"
+		/>
+		<var name="tidalFilterIndex" type="integer" dimensions="" units="unitless"
+			description="Current write index in the tidal filter circular buffer (1-based)"
+			packages="tidalVelocityFilterPKG"
+		/>
+		<var name="tidalFilterCount" type="integer" dimensions="" units="unitless"
+			description="Number of valid samples in the tidal filter circular buffer"
+			packages="tidalVelocityFilterPKG"
+		/>
+		<var name="tidalFilterStepCounter" type="integer" dimensions="" units="unitless"
+			description="Timesteps since the last tidal filter sample was stored"
+			packages="tidalVelocityFilterPKG"
 		/>
 		<!-- diagnostic fields for land-ice fluxes -->
 		<var name="landIceDraftForSsh" type="real" dimensions="nCells Time" units="m"

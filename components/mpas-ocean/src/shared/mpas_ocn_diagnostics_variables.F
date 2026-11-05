@@ -89,6 +89,17 @@ module ocn_diagnostics_variables
    integer, pointer :: gofsFilterCount
    integer, pointer :: gofsFilterStepCounter
 
+   ! 25-hour boxcar tidal velocity filter (topographic wave drag)
+   real (kind=RKIND), dimension(:), pointer :: tidalFilterLowpass
+   real (kind=RKIND), dimension(:), pointer :: tidalVelocity
+   real (kind=RKIND), dimension(:,:), pointer :: tidalVelocityBand
+   real (kind=RKIND), dimension(:,:), pointer :: tidalFilterBandP
+   real (kind=RKIND), dimension(:,:), pointer :: temp_twd_band
+   real (kind=RKIND), dimension(:,:), pointer :: tidalFilterBuffer
+   integer, pointer :: tidalFilterIndex
+   integer, pointer :: tidalFilterCount
+   integer, pointer :: tidalFilterStepCounter
+
    real (kind=RKIND), dimension(:,:), pointer :: tracersSurfaceValue
    real (kind=RKIND), dimension(:,:), pointer :: tracersSurfaceLayerValue
    real (kind=RKIND), dimension(:),   pointer :: normalVelocitySurfaceLayer
@@ -441,6 +452,9 @@ contains
                   'temp_twd', &
                    temp_twd)
          call mpas_pool_get_array(diagnosticsPool, &
+                  'temp_twd_band', &
+                   temp_twd_band)
+         call mpas_pool_get_array(diagnosticsPool, &
                   'normalCoeffTWD', &
                    normalCoeffTWD)
          call mpas_pool_get_array(diagnosticsPool, &
@@ -471,6 +485,25 @@ contains
                   'gofsFilterCount', gofsFilterCount)
          call mpas_pool_get_array(diagnosticsPool, &
                   'gofsFilterStepCounter', gofsFilterStepCounter)
+      end if
+      if (config_use_topographic_wave_drag .and. &
+          config_topographic_wave_drag_use_tidal_filter) then
+         call mpas_pool_get_array(diagnosticsPool, &
+                  'tidalFilterLowpass', tidalFilterLowpass)
+         call mpas_pool_get_array(diagnosticsPool, &
+                  'tidalVelocity', tidalVelocity)
+         call mpas_pool_get_array(diagnosticsPool, &
+                  'tidalVelocityBand', tidalVelocityBand)
+         call mpas_pool_get_array(diagnosticsPool, &
+                  'tidalFilterBandP', tidalFilterBandP)
+         call mpas_pool_get_array(diagnosticsPool, &
+                  'tidalFilterBuffer', tidalFilterBuffer)
+         call mpas_pool_get_array(diagnosticsPool, &
+                  'tidalFilterIndex', tidalFilterIndex)
+         call mpas_pool_get_array(diagnosticsPool, &
+                  'tidalFilterCount', tidalFilterCount)
+         call mpas_pool_get_array(diagnosticsPool, &
+                  'tidalFilterStepCounter', tidalFilterStepCounter)
       end if
       if ( trim(config_ocean_run_mode) == 'init' .or. &
                 config_AM_debugDiagnostics_enable ) then
@@ -1410,6 +1443,7 @@ contains
       end if
       if ( config_use_topographic_wave_drag) then
          nullify(temp_twd)
+         nullify(temp_twd_band)
          nullify(normalCoeffTWD)
          nullify(tangentialCoeffTWD)
          nullify(topographicWaveDrag)
@@ -1418,6 +1452,12 @@ contains
          nullify(gofsExternalPGrad, gofsTidalDragTend)
          nullify(gofsBarotropicVelocity, gofsLowpassVelocity, gofsTidalVelocity)
          nullify(gofsFilterBuffer, gofsFilterIndex, gofsFilterCount, gofsFilterStepCounter)
+      end if
+      if (config_use_topographic_wave_drag .and. &
+          config_topographic_wave_drag_use_tidal_filter) then
+         nullify(tidalFilterLowpass, tidalVelocity)
+         nullify(tidalVelocityBand, tidalFilterBandP)
+         nullify(tidalFilterBuffer, tidalFilterIndex, tidalFilterCount, tidalFilterStepCounter)
       end if
       if ( trim(config_time_integrator) == 'split_implicit' ) then
          nullify(SIvec_r0,              &

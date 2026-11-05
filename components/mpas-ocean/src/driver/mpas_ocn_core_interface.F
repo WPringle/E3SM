@@ -132,6 +132,7 @@ module ocn_core_interface
       logical, pointer :: vegetationDragPKGActive
       logical, pointer :: topographicWaveDragPKGActive
       logical, pointer :: gofsCouplingPKGActive
+      logical, pointer :: tidalVelocityFilterPKGActive
       logical, pointer :: inSituEOSActive
       logical, pointer :: variableShortwaveActive
       logical, pointer :: gmActive
@@ -169,6 +170,7 @@ module ocn_core_interface
       logical, pointer :: config_use_self_attraction_loading
       logical, pointer :: config_use_tidal_potential_forcing
       logical, pointer :: config_use_topographic_wave_drag
+      logical, pointer :: config_topographic_wave_drag_use_tidal_filter
       logical, pointer :: config_use_gofs_coupling
       logical, pointer :: config_use_GM
       logical, pointer :: config_submesoscale_enable
@@ -400,6 +402,16 @@ module ocn_core_interface
       call mpas_pool_get_config(configPool, 'config_use_gofs_coupling', config_use_gofs_coupling)
       if (config_use_gofs_coupling) then
          gofsCouplingPKGActive = .true.
+      end if
+
+      !
+      ! test for use of the tidal velocity filter, tidalVelocityFilterPKG
+      !
+      call mpas_pool_get_package(packagePool, 'tidalVelocityFilterPKGActive', tidalVelocityFilterPKGActive)
+      call mpas_pool_get_config(configPool, 'config_topographic_wave_drag_use_tidal_filter', &
+                                config_topographic_wave_drag_use_tidal_filter)
+      if (config_use_topographic_wave_drag .and. config_topographic_wave_drag_use_tidal_filter) then
+         tidalVelocityFilterPKGActive = .true.
       end if
 
       !

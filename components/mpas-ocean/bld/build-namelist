@@ -909,6 +909,19 @@ add_default($nl, 'config_topographic_wave_drag_coeff');
 add_default($nl, 'config_thickness_drag_type');
 add_default($nl, 'config_topographic_wave_drag_cutoff_depth');
 add_default($nl, 'config_topographic_wave_drag_cutoff_width');
+add_default($nl, 'config_topographic_wave_drag_layer_depth_max');
+add_default($nl, 'config_topographic_wave_drag_max_rate_dt');
+add_default($nl, 'config_topographic_wave_drag_use_dynamic_N');
+add_default($nl, 'config_topographic_wave_drag_use_tidal_filter');
+add_default($nl, 'config_tidal_filter_type');
+add_default($nl, 'config_tidal_filter_semi_frequency');
+add_default($nl, 'config_tidal_filter_diur_frequency');
+add_default($nl, 'config_tidal_filter_semi_alpha');
+add_default($nl, 'config_tidal_filter_diur_alpha');
+add_default($nl, 'config_topographic_wave_drag_kappa_semi');
+add_default($nl, 'config_topographic_wave_drag_kappa_diur');
+add_default($nl, 'config_tidal_filter_window');
+add_default($nl, 'config_tidal_filter_nsamples');
 
 ####################################
 # Namelist group: Rayleigh_damping #
