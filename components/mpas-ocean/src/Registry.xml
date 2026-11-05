@@ -3797,21 +3797,27 @@
 			description="intermediate estimate ssh for wetting/drying purposes"
 			packages="forwardMode"
 		/>
-		<var name="temp_twd" type="real" dimensions="nEdges Time" units=""
-			description="tendency perturbation due to topographic wave drag"
-			packages="tidalPotentialForcingPKG"
+		<!-- These four are read in ocn_diagnostics_variables under a
+		     config_use_topographic_wave_drag guard, so they must be allocated by
+		     topographicWaveDragPKG. They were previously packaged under
+		     tidalPotentialForcingPKG, which left them unallocated but still
+		     retrieved whenever the wave drag was used without tidal potential
+		     forcing. -->
+		<var name="temp_twd" type="real" dimensions="nEdges Time" units="m^2 s^-2"
+			description="Depth-integrated momentum sink per unit density from the topographic wave drag, C*u'. Multiplying by u' gives the energy per unit area and density removed from the barotropic tide."
+			packages="topographicWaveDragPKG"
 		/>
-		<var name="normalCoeffTWD" type="real" dimensions="nEdges" units=""
-			description="Coefficient multiplied by the normal velocity in the topographic wave drag"
-			packages="tidalPotentialForcingPKG"
+		<var name="normalCoeffTWD" type="real" dimensions="nEdges" units="unitless"
+			description="Coefficient multiplied by the normal velocity in the topographic wave drag. Unused by the JSL scheme; retained for the tensor schemes."
+			packages="topographicWaveDragPKG"
 		/>
-		<var name="tangentialCoeffTWD" type="real" dimensions="nEdges" units=""
-			description="Coefficient multiplied by the tangential velocity in the topographic wave drag"
-			packages="tidalPotentialForcingPKG"
+		<var name="tangentialCoeffTWD" type="real" dimensions="nEdges" units="unitless"
+			description="Coefficient multiplied by the tangential velocity in the topographic wave drag. Unused by the JSL scheme; retained for the tensor schemes."
+			packages="topographicWaveDragPKG"
 		/>
-		<var name="topographicWaveDrag" type="real" dimensions="nEdges" units=""
-			description="topographic wave drag multiplicative factor"
-			packages="tidalPotentialForcingPKG"
+		<var name="topographicWaveDrag" type="real" dimensions="nEdges" units="m"
+			description="Static part of the topographic wave drag coefficient, c_topo*kappa*bathy_stddev^2, tapered by the cutoff-depth ramp. Multiplied by the near-bed buoyancy frequency at run time to give the drag velocity in m/s."
+			packages="topographicWaveDragPKG"
 		/>
 	</var_struct>
 	<var_struct name="shortwave" time_levs="1">
